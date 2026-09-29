@@ -2,7 +2,7 @@
 
 ## Estado atual e limites
 
-React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Sem cliente HTTP, API, banco ou sessão real. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
+React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Primeira integração em andamento: src/services/api.js (cliente HTTP com bearer token, ativado por VITE_API_URL) e src/services/unidadesApi.js alimentam a listagem de Unidades, somente consulta, com estados loading/error/retry em AppDataContext. Todo o resto continua mock, sem sessão real. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
 
 Proteção de RecordDetails é uma **allowlist de exibição**, não sanitização de API, controle de acesso ou DTO definitivo.
 
