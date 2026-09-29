@@ -2,7 +2,7 @@
 
 ## Estado atual e limites
 
-React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Sem cliente HTTP, API, banco ou sessão real. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
+React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Primeira integração em andamento: src/services/api.js (cliente HTTP com bearer token, ativado por VITE_API_URL) e src/services/unidadesApi.js alimentam a listagem de Unidades, somente consulta, com estados loading/error/retry em AppDataContext. Todo o resto continua mock, sem sessão real. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
 
 Proteção de RecordDetails é uma **allowlist de exibição**, não sanitização de API, controle de acesso ou DTO definitivo.
 
@@ -43,15 +43,17 @@ Não remover defesas de torre+unidade antes de substituir sua função por ident
 
 ## DECISÕES NECESSÁRIAS ANTES DO PRIMEIRO ENDPOINT REAL
 
-- [ ] userId
-- [ ] condominiumId
-- [ ] unitId
+Itens marcados já foram definidos pelo backend; o detalhe está em “Contrato já integrado”.
+
+- [x] userId: UUID de `Usuario`, na claim `id` do JWT
+- [x] condominiumId: UUID, na claim `condominio_id` do JWT; não há header de tenant
+- [x] unitId: UUID de `Apartamento`; a torre é opcional (`torreId` nulo em condomínio horizontal)
 - [ ] person/resident identity
 - [ ] vínculo Morador-Unidade
-- [ ] areaId
-- [ ] ator autenticado
-- [ ] permissões
-- [ ] DTOs
+- [x] areaId: UUID de `AreaComum` (existe no backend, ainda não integrado no front)
+- [x] ator autenticado: usuário do JWT (subject = CPF), resolvido no servidor
+- [ ] permissões: a claim `perfil` existe, mas o backend ainda não restringe rotas por perfil
+- [ ] DTOs: definidos para Torre/Apartamento/Área comum; demais módulos pendentes
 - [ ] enums
 - [ ] nullable
 - [ ] datas
@@ -61,6 +63,42 @@ Não remover defesas de torre+unidade antes de substituir sua função por ident
 - [ ] paginação quando necessária
 
 Este checklist **não define** tipos de ID, URLs, JWT, refresh token, política de sessão, formato final de erro/DTO, idempotência ou versionamento. A equipe deve decidir por fluxo, incluindo escopo de acesso e dados que não podem chegar ao cliente.
+
+## Contrato já integrado
+
+Backend: [condomais-backend](https://github.com/ArthurFloro/condomais-backend) (Spring Boot). Documentação interativa em `/swagger-ui.html` da API.
+
+### Configuração e autenticação
+
+- `VITE_API_URL` liga a integração; sem ela, tudo é mock. Ver README, seção “Conectando à API”.
+- Login: `POST /auth/login` com `{ cpf, senha }` devolve `{ token }` (JWT, expira em 8 h). Primeiro acesso: `POST /auth/primeiro-acesso` com `{ cpf, novaSenha }`, só para usuário pré-cadastrado sem senha.
+- Toda chamada envia `Authorization: Bearer <token>`. Não há cookies; o CORS do backend libera `localhost:5173` e `127.0.0.1:5173`.
+- Claims do JWT: `sub` (CPF), `id`, `perfil`, `condominio_id`. O front lê as claims só para escopar requisições; a validação é do servidor.
+- O login do front ainda é mock e pede **e-mail**; o backend autentica por **CPF**. Até o ajuste da tela, o token de desenvolvimento vem de `VITE_API_TOKEN`.
+- `perfil` no backend é texto livre (ex.: `ADMIN`); os perfis do front são `ADMINISTRADOR`, `PORTEIRO` e `MORADOR`. O mapeamento precisa ser acordado antes de usar a claim para rotear layouts.
+
+### Unidades (Administração → Unidades, somente consulta)
+
+`src/services/unidadesApi.js` chama, com `condominioId` do token:
+
+- `GET /condominios/torres`: `TorreResponseDTO { id, nome, condominioId }`
+- `GET /condominios/apartamentos`: `ApartamentoResponseDTO { id, numero, status, torreId, condominioId }`
+
+| Front (`units`) | API |
+|---|---|
+| id | apartamento.id (UUID) |
+| number | apartamento.numero |
+| tower | nome da torre de `torreId`; vazio sem torre |
+| status | apartamento.status em maiúsculas (texto livre no backend) |
+| owners / residents | sempre `[]`: vínculo Morador-Unidade ainda não existe no backend |
+
+Criar/editar unidade fica oculto no modo API até os comandos serem integrados. Existem `POST /condominios/apartamentos` e `PUT /condominios/apartamentos/{id}` no backend.
+
+### Limitações conhecidas do backend
+
+- **Escopo por condomínio vem da query string.** As listagens aceitam `condominioId` por parâmetro e não o conferem com o token. O front sempre envia o do token, mas a proteção precisa ficar no servidor.
+- **Erros de regra de negócio respondem 403.** Sem tratamento global de exceções, uma validação (ex.: torre inexistente) chega como 403, indistinguível de “sem permissão”. Enquanto isso não muda, o front mostra “Sessão inválida” para esses casos.
+- `status` de apartamento é texto livre; os valores `OCUPADO`, `LIVRE`, `INATIVO` e `RESERVADO` são convenção, não enum validado.
 
 ## Enums e catálogos atuais
 

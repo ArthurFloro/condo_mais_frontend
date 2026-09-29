@@ -97,3 +97,12 @@ docs/
 Leia [INTEGRACAO-BACKEND.md](docs/INTEGRACAO-BACKEND.md) para arquitetura atual, entidades, enums, datas, contratos pendentes e estratégia incremental.
 
 Os services atuais retornam arrays/objetos de forma síncrona. A integração exigirá await, estados de carregamento/erro e reconciliação de respostas. Os mocks não devem ser importados literalmente para o banco nem usados como contrato definitivo.
+
+### Conectando à API (desenvolvimento)
+
+Sem configuração, o app usa apenas os mocks. Para ligar à API [condomais-backend](https://github.com/ArthurFloro/condomais-backend), copie `.env.example` para `.env.local` (ignorado pelo Git) e preencha:
+
+- `VITE_API_URL`: endereço da API, por exemplo `http://localhost:8080`.
+- `VITE_API_TOKEN`: token JWT obtido em `POST /auth/login` no Swagger da API (`/swagger-ui.html`). Expira em 8 horas. É temporário, até o login real ser integrado, e não deve ser versionado.
+
+Reinicie `pnpm dev` após alterar o arquivo. Hoje apenas **Administração → Unidades** vem da API, em modo somente consulta; as demais telas continuam com os mocks.

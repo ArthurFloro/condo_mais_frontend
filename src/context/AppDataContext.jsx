@@ -1,5 +1,7 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { initialAppData } from '../mocks/appData'
+import { apiEnabled } from '../services/api'
+import { listarUnidades } from '../services/unidadesApi'
 import { avisosService } from '../services/avisosService'
 import { moradoresService, unidadesService } from '../services/cadastrosService'
 import { chamadosService } from '../services/chamadosService'
@@ -17,9 +19,25 @@ function historyEntry(type, reference, unit, user = 'João Oliveira') {
 }
 
 export function AppDataProvider({ children }) {
-  const [data, setData] = useState(initialAppData)
+  const [data, setData] = useState(() => apiEnabled() ? { ...initialAppData, units: [] } : initialAppData)
+  // Coleções que vêm da API: status idle (mock) | loading | success | error
+  const [remote, setRemote] = useState({ units: { status: apiEnabled() ? 'loading' : 'idle', error: '' } })
+  const unitsRequest = useRef(0)
 
   const actions = useMemo(() => ({
+    async reloadUnits() {
+      const request = ++unitsRequest.current
+      setRemote((current) => ({ ...current, units: { status: 'loading', error: '' } }))
+      try {
+        const units = await listarUnidades()
+        if (request !== unitsRequest.current) return
+        setData((current) => ({ ...current, units }))
+        setRemote((current) => ({ ...current, units: { status: 'success', error: '' } }))
+      } catch (error) {
+        if (request !== unitsRequest.current) return
+        setRemote((current) => ({ ...current, units: { status: 'error', error: error.message } }))
+      }
+    },
     addVisitor(payload, source = 'PORTARIA') {
       let created
       setData((current) => {
@@ -65,7 +83,9 @@ export function AppDataProvider({ children }) {
     saveCondominium(payload) { setData((current) => ({ ...current, condominium: { ...current.condominium, ...payload } })) },
   }), [])
 
-  return <AppDataContext.Provider value={{ data, actions }}>{children}</AppDataContext.Provider>
+  useEffect(() => { if (apiEnabled()) actions.reloadUnits() }, [actions])
+
+  return <AppDataContext.Provider value={{ data, actions, remote }}>{children}</AppDataContext.Provider>
 }
 
 export function useAppData() {
