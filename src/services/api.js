@@ -59,9 +59,16 @@ async function request(method, path, { params = {}, body, fetchImpl = fetch } = 
     throw new ApiError(0, 'Não foi possível conectar ao servidor. Verifique sua conexão.')
   }
   if (!response.ok) throw await responseError(response)
-  return response.status === 204 ? null : response.json()
+  if (response.status === 204) return null
+  // DELETE e alguns PUT respondem 200 sem corpo
+  const text = await response.text()
+  return text ? JSON.parse(text) : null
 }
 
 export function apiGet(path, params = {}, { fetchImpl } = {}) { return request('GET', path, { params, fetchImpl }) }
 
 export function apiPost(path, body, { fetchImpl } = {}) { return request('POST', path, { body, fetchImpl }) }
+
+export function apiPut(path, body, { fetchImpl } = {}) { return request('PUT', path, { body, fetchImpl }) }
+
+export function apiDelete(path, { fetchImpl } = {}) { return request('DELETE', path, { fetchImpl }) }

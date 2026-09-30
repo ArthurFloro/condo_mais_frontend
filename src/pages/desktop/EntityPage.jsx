@@ -57,9 +57,16 @@ function EntityModule({ role, type }) {
   const { data, actions, remote } = useAppData()
   const records = data[config.collection]
   const service = services[config.collection]
-  // Coleção vinda da API: somente consulta até os comandos (criar/editar) serem integrados
+  // Coleção vinda da API (Unidades e Moradores): leitura e comandos passam pelo servidor
   const remoteState = remote?.[config.collection]
-  const readOnly = Boolean(remoteState && remoteState.status !== 'idle')
+  const remoteMode = Boolean(remoteState && remoteState.status !== 'idle')
+  const towerNames = remoteMode ? (data.towers || []).map((tower) => tower.name) : towers.slice(0, 3)
+  // Opções de torre vêm do banco; vínculos da unidade são geridos pelo cadastro de moradores
+  const fields = remoteMode
+    ? config.fields.filter((field) => !(config.collection === 'units' && ['owner', 'resident'].includes(field.key))).map((field) => field.key === 'tower' ? { ...field, options: towerNames } : field)
+    : config.fields
+  const [busy, setBusy] = useState(false)
+  const [towerForm, setTowerForm] = useState(null)
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState(0)
   const [filters, setFilters] = useState({ tower: '', unit: '', priority: '', category: '', date: '', user: '', operation: '', doorman: '' })
@@ -91,7 +98,22 @@ function EntityModule({ role, type }) {
   function startCreate() { setEditing(null); setForm({}); setError(''); setOpen(true) }
   function startEdit(record) { setEditing(record); setForm(config.collection === 'units' ? { ...record, owner: record.owners?.[0] || '', resident: record.residents?.[0] || '' } : { ...record }); setError(''); setDetails(null); setOpen(true) }
 
-  function saveRecord() {
+  // Executa um comando na API mantendo o formulário/diálogo aberto em caso de erro
+  async function runRemote(run, onError) {
+    if (busy) return false
+    setBusy(true)
+    try { await run(); return true } catch (remoteError) { onError(remoteError.message); return false } finally { setBusy(false) }
+  }
+
+  async function saveRecord() {
+    if (remoteMode) {
+      const validation = validate(fields, form) || basicValidation(form, data.units) || (config.collection === 'units' && unitDuplicate(data.units, form, editing?.id) ? 'Já existe uma unidade com este número nesta Torre / Bloco.' : '')
+      if (validation) { setError(validation); return }
+      const save = config.collection === 'units' ? actions.saveUnitRemote : actions.saveResidentRemote
+      const ok = await runRemote(() => save(form, editing?.id), setError)
+      if (ok) { setOpen(false); flash(editing ? 'Alterações salvas com sucesso.' : config.collection === 'residents' ? 'Morador cadastrado. Ele já pode fazer o primeiro acesso com o CPF.' : 'Registro salvo com sucesso.') }
+      return
+    }
     const validation = validate(config.fields, form) || basicValidation(form, data.units) || (config.collection === 'notices' ? noticePeriodError(form) : '') || (config.collection === 'units' && unitDuplicate(data.units, form, editing?.id) ? 'Já existe uma unidade com este número nesta Torre / Bloco.' : '')
     if (validation) { setError(validation); return }
     if (editing) {
@@ -112,8 +134,17 @@ function EntityModule({ role, type }) {
   }
 
   function requestAction(action, record, label, status) { setPendingAction({ action, record, label, status }) }
-  function confirmAction() {
+  async function confirmAction() {
     const { action, record, status } = pendingAction
+    if (remoteMode && ['resident', 'unitDelete'].includes(action)) {
+      const run = action === 'unitDelete' ? () => actions.deleteUnitRemote(record.id) : () => actions.setResidentStatusRemote(record.id, status)
+      const ok = await runRemote(run, (message) => { setPendingAction(null); flash(message) })
+      if (!ok) return
+      setPendingAction(null)
+      setDetails(action === 'unitDelete' ? null : (current) => current ? { ...current, status } : current)
+      flash(action === 'unitDelete' ? 'Unidade excluída.' : 'Status atualizado com sucesso.')
+      return
+    }
     if (action === 'visitor') {
       const entryError = status === 'ENTROU' ? visitorEntryError(data.visitors.find((item) => item.id === record.id)) : ''
       if (entryError) { setPendingAction(null); setDetails(null); flash(entryError); return }
@@ -141,7 +172,8 @@ function EntityModule({ role, type }) {
     if (config.collection === 'reservations' && !['CANCELADA', 'CONCLUIDA'].includes(record.status)) return <button className="danger-button" onClick={() => requestAction('reservation', record, 'Cancelar reserva', 'CANCELADA')}>Cancelar excepcionalmente</button>
     if (config.collection === 'notices') return <><button className="secondary-button" onClick={() => startEdit(record)}>Editar</button>{record.status === 'ATIVO' && <button className="danger-button" onClick={() => requestAction('notice', record, 'Encerrar comunicado', 'ENCERRADO')}>Encerrar</button>}</>
     if (config.collection === 'residents') return <><button className="secondary-button" onClick={() => startEdit(record)}>Editar</button><button className={record.status === 'ATIVO' ? 'danger-button' : 'primary-button'} onClick={() => requestAction('resident', record, record.status === 'ATIVO' ? 'Desativar morador' : 'Ativar morador', record.status === 'ATIVO' ? 'INATIVO' : 'ATIVO')}>{record.status === 'ATIVO' ? 'Desativar' : 'Ativar'}</button></>
-    if (config.collection === 'units' && !readOnly) return <button className="secondary-button" onClick={() => startEdit(record)}>Editar e gerenciar vínculos</button>
+    if (config.collection === 'units' && remoteMode) return <><button className="secondary-button" onClick={() => startEdit(record)}>Editar</button><button className="danger-button" onClick={() => requestAction('unitDelete', record, 'Excluir unidade', 'EXCLUIDA')}>Excluir</button></>
+    if (config.collection === 'units') return <button className="secondary-button" onClick={() => startEdit(record)}>Editar e gerenciar vínculos</button>
     if (config.collection === 'tickets') return <div className="ticket-actions"><select aria-label="Prioridade do chamado" value={record.priority} onChange={(event) => { actions.updateTicket(record.id, { priority: event.target.value }); setDetails({ ...record, priority: event.target.value }); flash('Prioridade atualizada.') }}><option>BAIXA</option><option>NORMAL</option><option>ALTA</option><option>URGENTE</option></select>{['EM_ANALISE', 'EM_ATENDIMENTO', 'RESOLVIDO', 'ENCERRADO'].filter((status) => status !== record.status).map((status) => <button className="secondary-button" key={status} onClick={() => requestAction('ticket', record, `Alterar para ${statusLabel(status)}`, status)}>{statusLabel(status)}</button>)}</div>
     return null
   }
@@ -154,10 +186,10 @@ function EntityModule({ role, type }) {
 
   return <DesktopLayout role={role}>
     <section className="entity-page">
-      <div className="entity-heading"><div><h1>{config.title}</h1><p>{config.subtitle}</p></div>{config.action && !readOnly && <button className="desktop-primary" onClick={startCreate}>+ {config.action}</button>}</div>
+      <div className="entity-heading"><div><h1>{config.title}</h1><p>{config.subtitle}</p></div><div className="entity-heading-actions">{remoteMode && config.collection === 'units' && <button className="secondary-button" onClick={() => { setTowerForm({ name: '' }); setError('') }}>+ Nova torre</button>}{config.action && <button className="desktop-primary" onClick={startCreate}>+ {config.action}</button>}</div></div>
       <div className="entity-toolbar"><div className="tabs">{config.tabs.map(([label], index) => <button aria-pressed={tab === index} className={tab === index ? 'active' : ''} onClick={() => setTab(index)} key={label}>{label}</button>)}</div><label className="search-box"><Search size={17} /><input aria-label="Buscar registros" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar registros..." /></label></div>
       <div className="advanced-filters">
-        {showTower && <label>Torre / Bloco<select value={filters.tower} onChange={(event) => setFilter('tower', event.target.value)}><option value="">Todas</option>{(readOnly ? [...new Set(records.map((item) => item.tower).filter(Boolean))] : towers).map((item) => <option key={item}>{item}</option>)}</select></label>}
+        {showTower && <label>Torre / Bloco<select value={filters.tower} onChange={(event) => setFilter('tower', event.target.value)}><option value="">Todas</option>{(remoteMode ? towerNames : towers).map((item) => <option key={item}>{item}</option>)}</select></label>}
         {showUnit && <label>Unidade<input value={filters.unit} onChange={(event) => setFilter('unit', event.target.value)} placeholder="Ex.: 203" /></label>}
         {showPriority && <label>Prioridade<select value={filters.priority} onChange={(event) => setFilter('priority', event.target.value)}><option value="">Todas</option>{priorities.map((item) => <option key={item}>{item}</option>)}</select></label>}
         {showCategory && <label>Categoria<select value={filters.category} onChange={(event) => setFilter('category', event.target.value)}><option value="">Todas</option>{[...new Set(records.map((item) => item.category))].map((item) => <option key={item}>{item}</option>)}</select></label>}
@@ -165,12 +197,13 @@ function EntityModule({ role, type }) {
         {config.history && <><label>Data<input type="date" value={filters.date} onChange={(event) => setFilter('date', event.target.value)} /></label><label>Operação<select value={filters.operation} onChange={(event) => setFilter('operation', event.target.value)}><option value="">Todas</option>{[...new Set(records.map((item) => item.type))].map((item) => <option key={item}>{item}</option>)}</select></label><label>Unidade<input value={filters.unit} onChange={(event) => setFilter('unit', event.target.value)} /></label><label>Usuário<select value={filters.user} onChange={(event) => setFilter('user', event.target.value)}><option value="">Todos</option>{[...new Set(records.map((item) => item.user))].map((item) => <option key={item}>{item}</option>)}</select></label></>}
         {hasFilters && <button className="clear-filters" onClick={resetFilters}>Limpar filtros</button>}
       </div>
-      <div className="table-wrap"><table><thead><tr>{config.columns.map(([label, key]) => <th className={key === 'status' ? 'status-column' : undefined} key={label}>{label}</th>)}<th className="action-column">Ações</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{config.columns.map(([label, key, secondKey], columnIndex) => { const value = cellValue(row, key, secondKey); const badge = key === 'status' || key === 'priority'; return <td className={key === 'status' ? 'status-column' : columnIndex === 0 ? 'identity-column' : undefined} key={label}>{badge ? <StatusBadge status={value.first}>{statusLabel(value.first)}</StatusBadge> : <span className="cell-stack"><strong>{value.first}</strong>{value.second && <small>{value.second}</small>}{columnIndex === 0 && row.status && <span className="compact-row-status"><StatusBadge status={row.status}>{statusLabel(row.status)}</StatusBadge></span>}</span>}</td>})}<td className="action-column"><button className="row-action" onClick={() => setDetails(row)}>Ver detalhes</button></td></tr>)}</tbody></table>{remoteState?.status === 'loading' ? <div className="empty-state" role="status"><strong>Carregando registros...</strong></div> : remoteState?.status === 'error' ? <div className="empty-state" role="alert"><strong>{remoteState.error}</strong><button className="text-link" onClick={actions.reloadUnits}>Tentar novamente</button></div> : rows.length === 0 && <EmptyState title={emptyMessage(config.collection, Boolean(records.length && hasFilters))} onClear={records.length && hasFilters ? resetFilters : undefined} />}</div>
+      <div className="table-wrap"><table><thead><tr>{config.columns.map(([label, key]) => <th className={key === 'status' ? 'status-column' : undefined} key={label}>{label}</th>)}<th className="action-column">Ações</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{config.columns.map(([label, key, secondKey], columnIndex) => { const value = cellValue(row, key, secondKey); const badge = key === 'status' || key === 'priority'; return <td className={key === 'status' ? 'status-column' : columnIndex === 0 ? 'identity-column' : undefined} key={label}>{badge ? <StatusBadge status={value.first}>{statusLabel(value.first)}</StatusBadge> : <span className="cell-stack"><strong>{value.first}</strong>{value.second && <small>{value.second}</small>}{columnIndex === 0 && row.status && <span className="compact-row-status"><StatusBadge status={row.status}>{statusLabel(row.status)}</StatusBadge></span>}</span>}</td>})}<td className="action-column"><button className="row-action" onClick={() => setDetails(row)}>Ver detalhes</button></td></tr>)}</tbody></table>{remoteState?.status === 'loading' ? <div className="empty-state" role="status"><strong>Carregando registros...</strong></div> : remoteState?.status === 'error' ? <div className="empty-state" role="alert"><strong>{remoteState.error}</strong><button className="text-link" onClick={() => actions.reloadCadastros()}>Tentar novamente</button></div> : rows.length === 0 && <EmptyState title={emptyMessage(config.collection, Boolean(records.length && hasFilters))} onClear={records.length && hasFilters ? resetFilters : undefined} />}</div>
       <div className="pagination"><span>Mostrando {rows.length} de {records.length} registros</span></div>
     </section>
-    <Modal open={open} title={editing ? `Editar ${config.title.toLowerCase()}` : config.action || 'Novo registro'} onClose={() => setOpen(false)} onConfirm={saveRecord} confirmLabel={editing ? 'Salvar alterações' : (type.includes('encomendas') ? 'Registrar' : 'Salvar')}><DynamicForm fields={config.fields} values={form} onChange={(key, value) => { setForm((current) => ({ ...current, [key]: value })); setError('') }} error={error} /></Modal>
+    <Modal open={open} title={editing ? `Editar ${config.title.toLowerCase()}` : config.action || 'Novo registro'} onClose={() => setOpen(false)} onConfirm={saveRecord} confirmLabel={busy ? 'Salvando...' : editing ? 'Salvar alterações' : (type.includes('encomendas') ? 'Registrar' : 'Salvar')}><DynamicForm fields={fields} values={form} onChange={(key, value) => { setForm((current) => ({ ...current, [key]: value })); setError('') }} error={error} /></Modal>
     <Modal open={Boolean(details)} title={details ? `Detalhes · ${details.id}` : 'Detalhes'} onClose={() => setDetails(null)} ><RecordDetails record={details} collection={config.collection} />{details && <div className="detail-actions">{detailActions(details)}</div>}{details && config.collection === 'tickets' && <div className="comment-box"><label>Adicionar comentário<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Descreva a atualização" /></label><button className="secondary-button" disabled={!comment.trim()} onClick={() => { actions.updateTicket(details.id, { comments: [...(details.comments || []), comment] }); setDetails({ ...details, comments: [...(details.comments || []), comment] }); setComment(''); flash('Comentário adicionado.') }}>Adicionar comentário</button></div>}</Modal>
-    <ConfirmDialog open={Boolean(pendingAction)} title={pendingAction?.label} message={confirmationMessage(pendingAction?.record, pendingAction?.label, pendingAction?.status)} destructive={['RECUSADO', 'CANCELADA', 'ENCERRADO', 'INATIVO'].includes(pendingAction?.status)} confirmLabel={pendingAction?.label || 'Confirmar'} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} />
+    <ConfirmDialog open={Boolean(pendingAction)} title={pendingAction?.label} message={confirmationMessage(pendingAction?.record, pendingAction?.label, pendingAction?.status)} destructive={['RECUSADO', 'CANCELADA', 'ENCERRADO', 'INATIVO', 'EXCLUIDA'].includes(pendingAction?.status)} confirmLabel={busy ? 'Aguarde...' : pendingAction?.label || 'Confirmar'} onCancel={() => setPendingAction(null)} onConfirm={confirmAction} />
+    <Modal open={Boolean(towerForm)} title="Nova torre" onClose={() => setTowerForm(null)} onConfirm={async () => { const ok = await runRemote(() => actions.createTower(towerForm.name), setError); if (ok) { setTowerForm(null); flash('Torre cadastrada.') } }} confirmLabel={busy ? 'Salvando...' : 'Salvar'}><DynamicForm fields={[{ key: 'name', label: 'Nome da torre / bloco', required: true }]} values={towerForm || {}} onChange={(key, value) => { setTowerForm((current) => ({ ...current, [key]: value })); setError('') }} error={towerForm ? error : ''} columns={false} /></Modal>
     <div role="status" aria-live="polite" aria-atomic="true">{saved && <div className="toast">{saved}</div>}</div>
   </DesktopLayout>
 }

@@ -2,7 +2,7 @@
 
 ## Estado atual e limites
 
-React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Primeira integração em andamento: src/services/api.js (cliente HTTP com bearer token, ativado por VITE_API_URL) e src/services/unidadesApi.js alimentam a listagem de Unidades, somente consulta, com estados loading/error/retry em AppDataContext. Todo o resto continua mock, sem sessão real. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
+React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Primeira integração em andamento: src/services/api.js (cliente HTTP com bearer token, ativado por VITE_API_URL) e src/services/cadastrosApi.js alimentam os cadastros de Unidades, Torres e Moradores (leitura e comandos), com estados loading/error/retry em AppDataContext. Login por CPF via API (src/services/authApi.js). As demais telas continuam mock. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
 
 Proteção de RecordDetails é uma **allowlist de exibição**, não sanitização de API, controle de acesso ou DTO definitivo.
 
@@ -93,22 +93,37 @@ Sem corpo JSON ou sem `mensagem`, o front usa um texto padrão por status (`src/
 - `perfil` no backend é texto livre. O front aceita, sem diferenciar maiúsculas nem acentos: `ADMIN`/`ADMINISTRADOR`/`ADMINISTRAÇÃO` → `/admin`, `PORTARIA`/`PORTEIRO` → `/portaria`, `MORADOR` → `/morador`. Um enum no backend eliminaria essa tolerância.
 - As rotas do front ainda não exigem sessão: sem token, as telas integradas mostram “Sessão inválida” em vez de redirecionar ao login.
 
-### Unidades (Administração → Unidades, somente consulta)
+### Cadastros: Unidades, Torres e Moradores (Administração)
 
-`src/services/unidadesApi.js` chama, com `condominioId` do token:
+`src/services/cadastrosApi.js` carrega os três juntos (`AppDataContext.reloadCadastros`) e recarrega após cada comando:
 
-- `GET /condominios/torres`: `TorreResponseDTO { id, nome, condominioId }`
-- `GET /condominios/apartamentos`: `ApartamentoResponseDTO { id, numero, status, torreId, condominioId }`
+| Tela | Leitura | Comandos |
+|---|---|---|
+| Unidades | `GET /condominios/torres?condominioId=` e `GET /condominios/apartamentos?condominioId=` (condomínio do token) | `POST`/`PUT /condominios/apartamentos[/{id}]`, `DELETE /condominios/apartamentos/{id}`, `POST /condominios/torres` (botão “Nova torre”) |
+| Moradores | `GET /usuarios` (só ADMIN; perfil `MORADOR`) | `POST`/`PUT /usuarios[/{id}]`, `PUT /usuarios/{id}/desativar` e `/ativar` |
 
 | Front (`units`) | API |
 |---|---|
 | id | apartamento.id (UUID) |
 | number | apartamento.numero |
-| tower | nome da torre de `torreId`; vazio sem torre |
+| tower / towerId | nome e id da torre; vazio sem torre |
 | status | apartamento.status em maiúsculas (texto livre no backend) |
-| owners / residents | sempre `[]`: vínculo Morador-Unidade ainda não existe no backend |
+| owners / residents | nomes dos moradores **ativos** vinculados (proprietários / todos) |
 
-Criar/editar unidade fica oculto no modo API até os comandos serem integrados. Existem `POST /condominios/apartamentos` e `PUT /condominios/apartamentos/{id}` no backend.
+| Front (`residents`) | API (`UsuarioResponseDTO`) |
+|---|---|
+| id, name, cpf, email, phone | id, nome, cpf (formatado), email, telefone |
+| tower, unit, unitId | torreNome, apartamentoNumero, apartamentoId |
+| relation, isOwner | vinculo (`PROPRIETARIO`/`INQUILINO`) |
+| status | `ATIVO`/`INATIVO` (inativo não consegue logar) |
+| pendingFirstAccess | primeiroAcessoPendente (ainda sem senha) |
+
+- O formulário de morador continua pedindo Torre + número da unidade; o front resolve o `apartamentoId` pela combinação.
+- Morador cadastrado fica **sem senha**: ele cria a senha no primeiro acesso, com o CPF (hoje pelo Swagger, em `POST /auth/primeiro-acesso`).
+- Os vínculos proprietário/morador da unidade saem do cadastro de moradores; o formulário de unidade não os edita no modo API.
+- Excluir uma unidade com moradores ou registros vinculados é recusado pela API (409), com a mensagem exibida.
+- Unidade sem torre (condomínio horizontal) aparece na lista, mas ainda não pode receber morador pelo formulário, que exige torre.
+- Sem `/usuarios` no backend (404) ou sem perfil ADMIN (403), a lista de moradores vem vazia e o resto funciona.
 
 ### Limitações conhecidas do backend
 

@@ -39,6 +39,7 @@ export function confirmationMessage(record, label, status) {
     RECUSADA: 'A solicitação de reserva será recusada.',
     CONFIRMADA: 'A reserva será confirmada para o período informado.',
     INATIVO: 'O cadastro ficará inativo; os registros anteriores serão mantidos.',
+    EXCLUIDA: 'A unidade será excluída definitivamente. Unidades com moradores ou registros vinculados não podem ser excluídas.',
     ATIVO: 'O cadastro voltará a ficar ativo.',
     ENCERRADO: 'O registro será marcado como encerrado.',
   }

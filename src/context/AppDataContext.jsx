@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { initialAppData } from '../mocks/appData'
 import { apiEnabled } from '../services/api'
-import { listarUnidades } from '../services/unidadesApi'
+import { alterarStatusMorador, carregarCadastros, criarTorre, excluirUnidade, salvarMorador, salvarUnidade } from '../services/cadastrosApi'
 import { avisosService } from '../services/avisosService'
 import { moradoresService, unidadesService } from '../services/cadastrosService'
 import { chamadosService } from '../services/chamadosService'
@@ -19,25 +19,45 @@ function historyEntry(type, reference, unit, user = 'João Oliveira') {
 }
 
 export function AppDataProvider({ children }) {
-  const [data, setData] = useState(() => apiEnabled() ? { ...initialAppData, units: [] } : initialAppData)
-  // Coleções que vêm da API: status idle (mock) | loading | success | error
-  const [remote, setRemote] = useState({ units: { status: apiEnabled() ? 'loading' : 'idle', error: '' } })
-  const unitsRequest = useRef(0)
+  const [data, setData] = useState(() => apiEnabled() ? { ...initialAppData, towers: [], units: [], residents: [] } : initialAppData)
+  // Coleções que vêm da API (cadastros): status idle (mock) | loading | success | error
+  const initialRemote = { status: apiEnabled() ? 'loading' : 'idle', error: '' }
+  const [remote, setRemote] = useState({ units: initialRemote, residents: initialRemote })
+  const cadastrosRequest = useRef(0)
+  const dataRef = useRef(data)
+  dataRef.current = data
 
-  const actions = useMemo(() => ({
-    async reloadUnits() {
-      const request = ++unitsRequest.current
-      setRemote((current) => ({ ...current, units: { status: 'loading', error: '' } }))
+  const actions = useMemo(() => {
+    const setCadastrosStatus = (state) => setRemote((current) => ({ ...current, units: state, residents: state }))
+
+    // Recarrega torres, unidades e moradores; resposta obsoleta não sobrescreve a mais nova
+    async function reloadCadastros({ silent = false } = {}) {
+      const request = ++cadastrosRequest.current
+      if (!silent) setCadastrosStatus({ status: 'loading', error: '' })
       try {
-        const units = await listarUnidades()
-        if (request !== unitsRequest.current) return
-        setData((current) => ({ ...current, units }))
-        setRemote((current) => ({ ...current, units: { status: 'success', error: '' } }))
+        const { towers, units, residents } = await carregarCadastros()
+        if (request !== cadastrosRequest.current) return
+        setData((current) => ({ ...current, towers, units, residents }))
+        setCadastrosStatus({ status: 'success', error: '' })
       } catch (error) {
-        if (request !== unitsRequest.current) return
-        setRemote((current) => ({ ...current, units: { status: 'error', error: error.message } }))
+        if (request !== cadastrosRequest.current) return
+        setCadastrosStatus({ status: 'error', error: error.message })
       }
-    },
+    }
+
+    // Comandos na API: lançam ApiError (a tela mantém o formulário aberto) e, se der certo, recarregam
+    async function command(run) {
+      await run()
+      await reloadCadastros({ silent: true })
+    }
+
+    return {
+    reloadCadastros,
+    createTower: (name) => command(() => criarTorre(name)),
+    saveUnitRemote: (form, editingId) => command(() => salvarUnidade(form, editingId, dataRef.current.towers)),
+    deleteUnitRemote: (id) => command(() => excluirUnidade(id)),
+    saveResidentRemote: (form, editingId) => command(() => salvarMorador(form, editingId, dataRef.current.units)),
+    setResidentStatusRemote: (id, status) => command(() => alterarStatusMorador(id, status)),
     addVisitor(payload, source = 'PORTARIA') {
       let created
       setData((current) => {
@@ -81,9 +101,10 @@ export function AppDataProvider({ children }) {
     addUnit(payload) { setData((current) => { const result = unidadesService.criar(current.units, payload); return { ...current, units: result.records } }) },
     updateUnit(id, patch) { setData((current) => ({ ...current, units: unidadesService.atualizar(current.units, id, patch) })) },
     saveCondominium(payload) { setData((current) => ({ ...current, condominium: { ...current.condominium, ...payload } })) },
-  }), [])
+    }
+  }, [])
 
-  useEffect(() => { if (apiEnabled()) actions.reloadUnits() }, [actions])
+  useEffect(() => { if (apiEnabled()) actions.reloadCadastros() }, [actions])
 
   return <AppDataContext.Provider value={{ data, actions, remote }}>{children}</AppDataContext.Provider>
 }

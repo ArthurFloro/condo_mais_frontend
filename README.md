@@ -107,4 +107,5 @@ Com a API ligada:
 - o login autentica em `POST /auth/login` com CPF e senha de um usuário do backend. O primeiro acesso de um usuário recém-cadastrado ainda é feito pelo Swagger da API (`/swagger-ui.html`), em `POST /auth/primeiro-acesso`;
 - o perfil do usuário (`ADMIN`, `PORTARIA`, `MORADOR`...) decide a área aberta após o login;
 - o token fica no `sessionStorage`: some ao fechar a aba, expira em 8 horas e é apagado em “Sair”;
-- hoje apenas **Administração → Unidades** vem da API, em modo somente consulta; as demais telas continuam com os mocks.
+- **Administração → Unidades** (com cadastro de torres) e **Administração → Moradores** usam a API para listar, criar, editar, excluir unidades e ativar/desativar moradores; as demais telas continuam com os mocks;
+- morador cadastrado pela Administração entra sem senha e a cria no primeiro acesso, com o CPF.
