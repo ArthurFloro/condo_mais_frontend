@@ -35,3 +35,15 @@ export async function login(cpf, senha, options) {
 }
 
 export function logout() { setToken('') }
+
+// Primeiro acesso: cria a senha de um usuário pré-cadastrado pela Administração e já entra no sistema.
+// O backend responde a mesma recusa (403) para CPF inexistente e para quem já tem senha.
+export async function primeiroAcesso(cpf, novaSenha, options) {
+  try {
+    await apiPost('/auth/primeiro-acesso', { cpf: formatCpf(cpf), novaSenha }, options)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 403) throw new ApiError(403, 'Não encontramos um cadastro pendente de ativação para este CPF. Se você já criou sua senha, entre pelo login ou use “Esqueci minha senha”.')
+    throw error
+  }
+  return login(cpf, novaSenha, options)
+}

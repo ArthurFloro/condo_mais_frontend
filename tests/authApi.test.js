@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { getToken, setToken } from '../src/services/api.js'
-import { cpfComplete, formatCpf, login, logout, profilePath } from '../src/services/authApi.js'
+import { cpfComplete, formatCpf, login, logout, primeiroAcesso, profilePath } from '../src/services/authApi.js'
 
 // sessionStorage mínimo para o Node.
 const storage = new Map()
@@ -63,5 +63,34 @@ test('perfil sem área no front recusa a entrada e não guarda token', async () 
 test('logout apaga o token da sessão', () => {
   setToken('qualquer')
   logout()
+  assert.equal(getToken(), '')
+})
+
+// Rotas falsas: cada caminho responde com [status, corpo em texto]
+function routes(table) {
+  const calls = []
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init })
+    const [status, text] = Object.entries(table).find(([path]) => url.endsWith(path))[1]
+    return { ok: status < 400, status, text: async () => text, json: async () => JSON.parse(text) }
+  }
+  return { fetchImpl, calls }
+}
+
+test('primeiro acesso cria a senha (resposta em texto puro) e já entra no sistema', async () => {
+  logout()
+  const token = fakeJwt({ perfil: 'MORADOR', condominio_id: 'c-1' })
+  const { fetchImpl, calls } = routes({ '/auth/primeiro-acesso': [200, 'Senha criada com sucesso. Você já pode realizar o login.'], '/auth/login': [200, JSON.stringify({ token })] })
+  assert.deepEqual(await primeiroAcesso('52998224725', 'senha-forte', { fetchImpl }), { path: '/morador' })
+  assert.deepEqual(JSON.parse(calls[0].init.body), { cpf: '529.982.247-25', novaSenha: 'senha-forte' })
+  assert.deepEqual(JSON.parse(calls[1].init.body), { cpf: '529.982.247-25', senha: 'senha-forte' })
+  assert.equal(getToken(), token)
+})
+
+test('primeiro acesso recusado não revela o motivo e não chama o login', async () => {
+  logout()
+  const { fetchImpl, calls } = routes({ '/auth/primeiro-acesso': [403, 'Primeiro acesso indisponível para este CPF.'] })
+  await assert.rejects(primeiroAcesso('529.982.247-25', 'senha-forte', { fetchImpl }), (error) => error.status === 403 && /cadastro pendente de ativação/.test(error.message))
+  assert.equal(calls.length, 1)
   assert.equal(getToken(), '')
 })

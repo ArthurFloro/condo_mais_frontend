@@ -119,7 +119,7 @@ Sem corpo JSON ou sem `mensagem`, o front usa um texto padrão por status (`src/
 | pendingFirstAccess | primeiroAcessoPendente (ainda sem senha) |
 
 - O formulário de morador continua pedindo Torre + número da unidade; o front resolve o `apartamentoId` pela combinação.
-- Morador cadastrado fica **sem senha**: ele cria a senha no primeiro acesso, com o CPF (hoje pelo Swagger, em `POST /auth/primeiro-acesso`).
+- Morador cadastrado fica **sem senha**: ele cria a senha em “Ativar minha conta” (`AuthFlowPage` → `authApi.primeiroAcesso`), que chama `POST /auth/primeiro-acesso` e em seguida faz login. A recusa do backend (CPF sem cadastro ou já ativado) aparece como uma mensagem única, sem revelar qual dos dois casos é.
 - Os vínculos proprietário/morador da unidade saem do cadastro de moradores; o formulário de unidade não os edita no modo API.
 - Excluir uma unidade com moradores ou registros vinculados é recusado pela API (409), com a mensagem exibida.
 - Unidade sem torre (condomínio horizontal) aparece na lista, mas ainda não pode receber morador pelo formulário, que exige torre.
@@ -220,9 +220,9 @@ Com `VITE_API_URL`, o login usa a API (ver “Contrato já integrado”). Sem el
 
 No modo mock, a verificação local de CPF/senha serve apenas para permitir acesso determinístico aos três ambientes durante o desenvolvimento. **Não representa segurança**: o código e as credenciais chegam ao navegador. Nos dois modos, as rotas do front ainda não exigem sessão, e “Lembrar de mim” não implementa persistência.
 
-Ainda pendente: proteger as rotas do front conforme a sessão, redirecionar ao login quando o token expirar, e integrar primeiro acesso e recuperação de senha. A autorização por perfil também precisa existir no servidor.
+Ainda pendente: proteger as rotas do front conforme a sessão, redirecionar ao login quando o token expirar, e integrar a recuperação de senha. A autorização por perfil também precisa existir no servidor.
 
-Primeiro acesso, criação e recuperação de senha continuam demonstrativos: não criam contas, não modificam as credenciais mock e não enviam mensagens. Não usar dados reais enquanto essas integrações não existirem.
+Com a API, o primeiro acesso cria a senha de verdade. No modo mock, ele e a recuperação de senha são demonstrativos. A recuperação continua demonstrativa nos dois modos: não altera senhas nem envia mensagens.
 
 ## Execução e hospedagem
 

@@ -60,9 +60,10 @@ async function request(method, path, { params = {}, body, fetchImpl = fetch } = 
   }
   if (!response.ok) throw await responseError(response)
   if (response.status === 204) return null
-  // DELETE e alguns PUT respondem 200 sem corpo
+  // DELETE e alguns PUT respondem 200 sem corpo; /auth/primeiro-acesso responde texto puro
   const text = await response.text()
-  return text ? JSON.parse(text) : null
+  if (!text) return null
+  try { return JSON.parse(text) } catch { return text }
 }
 
 export function apiGet(path, params = {}, { fetchImpl } = {}) { return request('GET', path, { params, fetchImpl }) }

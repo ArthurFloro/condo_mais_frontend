@@ -62,7 +62,7 @@ O login é por **CPF e senha**. Com a API ligada (seção “Conectando à API�
 
 Essas credenciais existem exclusivamente no modo mock. São públicas e fictícias, não segredos, e os CPFs são propositalmente inválidos. A fonte única é src/mocks/mockUsers.js.
 
-No modo mock, o login rejeita credenciais incorretas, mas isso **não é segurança nem autorização**: as rotas ainda podem ser acessadas diretamente. Primeiro acesso e recuperação são demonstrativos nos dois modos, não alteram contas nem enviam e-mail.
+No modo mock, o login rejeita credenciais incorretas, mas isso **não é segurança nem autorização**: as rotas ainda podem ser acessadas diretamente. No modo mock, primeiro acesso e recuperação são demonstrativos. Com a API, o primeiro acesso é real; a recuperação de senha continua demonstrativa e não envia e-mail.
 
 ## Estrutura
 
@@ -104,7 +104,7 @@ Sem configuração, o app usa apenas os mocks. Para ligar à API [condomais-back
 
 Com a API ligada:
 
-- o login autentica em `POST /auth/login` com CPF e senha de um usuário do backend. O primeiro acesso de um usuário recém-cadastrado ainda é feito pelo Swagger da API (`/swagger-ui.html`), em `POST /auth/primeiro-acesso`;
+- o login autentica em `POST /auth/login` com CPF e senha de um usuário do backend. Um usuário recém-cadastrado ativa a conta em “Ativar minha conta” (CPF e nova senha), que chama `POST /auth/primeiro-acesso` e já entra no sistema;
 - o perfil do usuário (`ADMIN`, `PORTARIA`, `MORADOR`...) decide a área aberta após o login;
 - o token fica no `sessionStorage`: some ao fechar a aba, expira em 8 horas e é apagado em “Sair”;
 - **Administração → Unidades** (com cadastro de torres) e **Administração → Moradores** usam a API para listar, criar, editar, excluir unidades e ativar/desativar moradores; as demais telas continuam com os mocks;
