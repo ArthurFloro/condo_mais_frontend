@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Brand from '../components/Brand'
 import Modal from '../components/Modal'
 import { useAppData } from '../context/AppDataContext'
+import { logout } from '../services/authApi'
 
 const adminLinks = [
   ['Visão geral', '/admin', CircleGauge], ['Moradores', '/admin/moradores', UsersRound], ['Unidades', '/admin/unidades', Building], ['Encomendas', '/admin/encomendas', Package], ['Reservas', '/admin/reservas', CalendarCheck], ['Visitantes', '/admin/visitantes', Contact], ['Comunicados', '/admin/comunicados', Megaphone], ['Chamados', '/admin/chamados', Headphones],
@@ -24,7 +25,7 @@ export default function DesktopLayout({ role, children }) {
         <Brand inverse />
         <button className="compact-menu-button" aria-expanded={menuOpen} aria-haspopup="dialog" onClick={() => setMenuOpen(true)}><Menu size={22} /> Menu</button>
         <nav>{links.map(([label, to, Icon]) => <NavLink aria-label={label} title={label} to={to} end={to === `/${role}`} key={to}><Icon size={20} /><span>{label}</span></NavLink>)}</nav>
-        <div className="sidebar__bottom">{role === 'admin' && <NavLink aria-label="Configurações" title="Configurações" to="/admin/configuracoes"><Settings size={20} />Configurações</NavLink>}<NavLink aria-label="Sair" title="Sair" to="/"><LogOut size={20} />Sair</NavLink></div>
+        <div className="sidebar__bottom">{role === 'admin' && <NavLink aria-label="Configurações" title="Configurações" to="/admin/configuracoes"><Settings size={20} />Configurações</NavLink>}<NavLink aria-label="Sair" title="Sair" to="/" onClick={logout}><LogOut size={20} />Sair</NavLink></div>
       </aside>
       <section className="desktop-main">
         <header><strong>{data.condominium.name}</strong><div><button className="header-icon" aria-label="Notificações" onClick={() => flash('Nenhuma nova notificação para este perfil.')}><Bell size={21} /></button><button className="avatar" aria-label="Perfil do usuário" onClick={() => flash(role === 'admin' ? 'Perfil: Administrador' : 'Perfil: João · Portaria')}><UserRound size={18} /></button></div></header>
@@ -34,7 +35,7 @@ export default function DesktopLayout({ role, children }) {
         <nav aria-label="Menu principal">{links.map(([label, to, Icon]) => <NavLink to={to} end={to === `/${role}`} key={to} onClick={() => setMenuOpen(false)}><Icon size={20} />{label}</NavLink>)}
           {role === 'admin' && <NavLink to="/admin/configuracoes" onClick={() => setMenuOpen(false)}><Settings size={20} />Configurações</NavLink>}
           {role === 'portaria' && <><button onClick={() => { setMenuOpen(false); flash('Nenhuma nova notificação para este perfil.') }}><Bell size={20} />Notificações</button><button onClick={() => { setMenuOpen(false); flash('Perfil: João · Portaria') }}><UserRound size={20} />Meu perfil</button></>}
-          <NavLink to="/" onClick={() => setMenuOpen(false)}><LogOut size={20} />Sair</NavLink>
+          <NavLink to="/" onClick={() => { logout(); setMenuOpen(false) }}><LogOut size={20} />Sair</NavLink>
         </nav>
       </Modal></div>
       <div role="status" aria-live="polite" aria-atomic="true">{feedback && <div className="toast">{feedback}</div>}</div>

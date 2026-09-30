@@ -1,19 +1,21 @@
-// Contas públicas e fictícias para desenvolvimento. Não constituem autenticação segura.
-// Remover ao integrar a autenticação do backend; não é um contrato definitivo de usuário.
+// Contas públicas e fictícias para desenvolvimento sem API (VITE_API_URL vazio).
+// Não constituem autenticação segura. Com a API ligada, o login usa POST /auth/login.
+// CPFs propositalmente inválidos (dígitos verificadores errados): não pertencem a ninguém.
 export const mockUsers = [
-  { email: 'admin@condomais.local', password: 'CondoDev123!', profile: 'ADMINISTRADOR' },
-  { email: 'portaria@condomais.local', password: 'CondoDev123!', profile: 'PORTEIRO' },
-  { email: 'morador@condomais.local', password: 'CondoDev123!', profile: 'MORADOR' },
+  { cpf: '000.000.000-01', password: 'CondoDev123!', profile: 'ADMINISTRADOR' },
+  { cpf: '000.000.000-02', password: 'CondoDev123!', profile: 'PORTEIRO' },
+  { cpf: '000.000.000-03', password: 'CondoDev123!', profile: 'MORADOR' },
 ]
 
 const profilePaths = { ADMINISTRADOR: '/admin', PORTEIRO: '/portaria', MORADOR: '/morador' }
+const digits = (value) => String(value).replace(/\D/g, '')
 
-export function validateMockLogin(email = '', password = '') {
+export function validateMockLogin(cpf = '', password = '') {
   const invalidFields = []
-  if (!email.trim()) invalidFields.push('email')
+  if (!cpf.trim()) invalidFields.push('cpf')
   if (!password.trim()) invalidFields.push('password')
-  if (invalidFields.length) return { error: 'Preencha o e-mail e a senha.', invalidFields }
-  const account = mockUsers.find((user) => user.email === email.trim().toLowerCase() && user.password === password)
-  if (!account) return { error: 'E-mail ou senha inválidos.', invalidFields: ['email', 'password'] }
+  if (invalidFields.length) return { error: 'Preencha o CPF e a senha.', invalidFields }
+  const account = mockUsers.find((user) => digits(user.cpf) === digits(cpf) && user.password === password)
+  if (!account) return { error: 'CPF ou senha inválidos.', invalidFields: ['cpf', 'password'] }
   return { path: profilePaths[account.profile] }
 }

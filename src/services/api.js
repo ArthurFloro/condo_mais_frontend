@@ -10,10 +10,9 @@ export class ApiError extends Error {
   constructor(status, message) { super(message); this.name = 'ApiError'; this.status = status }
 }
 
-// Enquanto o login real não estiver integrado, VITE_API_TOKEN permite testar em desenvolvimento.
+// Token da sessão, gravado no login. sessionStorage: some ao fechar a aba.
 export function getToken() {
-  try { const stored = sessionStorage.getItem(TOKEN_KEY); if (stored) return stored } catch { /* sem sessionStorage */ }
-  return env.VITE_API_TOKEN || ''
+  try { return sessionStorage.getItem(TOKEN_KEY) || '' } catch { return '' }
 }
 
 export function setToken(token) {
@@ -49,15 +48,20 @@ async function responseError(response) {
   return new ApiError(response.status, message)
 }
 
-export async function apiGet(path, params = {}, { fetchImpl = fetch } = {}) {
+async function request(method, path, { params = {}, body, fetchImpl = fetch } = {}) {
   const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
   const token = getToken()
+  const headers = { Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
   let response
   try {
-    response = await fetchImpl(`${API_URL}${path}${query ? `?${query}` : ''}`, { headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+    response = await fetchImpl(`${API_URL}${path}${query ? `?${query}` : ''}`, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
   } catch {
     throw new ApiError(0, 'Não foi possível conectar ao servidor. Verifique sua conexão.')
   }
   if (!response.ok) throw await responseError(response)
   return response.status === 204 ? null : response.json()
 }
+
+export function apiGet(path, params = {}, { fetchImpl } = {}) { return request('GET', path, { params, fetchImpl }) }
+
+export function apiPost(path, body, { fetchImpl } = {}) { return request('POST', path, { body, fetchImpl }) }
