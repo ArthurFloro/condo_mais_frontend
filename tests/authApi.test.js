@@ -12,7 +12,7 @@ const fakeJwt = (claims) => `${base64url({ alg: 'HS256' })}.${base64url(claims)}
 
 function respond(status, body) {
   const calls = []
-  const fetchImpl = async (url, init) => { calls.push({ url, init }); return { ok: status < 400, status, json: async () => body } }
+  const fetchImpl = async (url, init) => { calls.push({ url, init }); return { ok: status < 400, status, json: async () => body, text: async () => (body === undefined ? '' : JSON.stringify(body)) } }
   return { fetchImpl, calls }
 }
 

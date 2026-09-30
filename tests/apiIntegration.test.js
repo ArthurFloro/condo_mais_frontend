@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ApiError, apiGet, condominioIdFromToken, setToken, tokenClaims } from '../src/services/api.js'
-import { listarUnidades, toUnit } from '../src/services/unidadesApi.js'
+import { alterarStatusMorador, carregarCadastros, criarTorre, excluirUnidade, linkResidents, salvarMorador, salvarUnidade, toResident, toUnit } from '../src/services/cadastrosApi.js'
 
 // sessionStorage mínimo para o Node; cada teste define o próprio token.
 const storage = new Map()
@@ -15,9 +15,9 @@ function fakeFetch(routes) {
   const fetchImpl = async (url, init) => {
     calls.push({ url, init })
     const route = routes.find(([prefix]) => url.includes(prefix))
-    if (!route) return { ok: false, status: 404, json: async () => ({}) }
+    if (!route) return { ok: false, status: 404, json: async () => ({}), text: async () => '{}' }
     const [, status, body] = route
-    return { ok: status < 400, status, json: async () => body }
+    return { ok: status < 400, status, json: async () => body, text: async () => (body === undefined ? '' : JSON.stringify(body)) }
   }
   return { fetchImpl, calls }
 }
@@ -67,25 +67,81 @@ test('erro sem corpo JSON ou sem mensagem usa o texto padrão do status', async 
 
 test('apartamento vira unidade com nome da torre; sem torre fica em branco', () => {
   const towers = { 't-a': 'Torre A' }
-  assert.deepEqual(toUnit({ id: 'ap-1', numero: '203', status: 'ocupado', torreId: 't-a', condominioId: 'c-1' }, towers), { id: 'ap-1', number: '203', tower: 'Torre A', status: 'OCUPADO', owners: [], residents: [] })
+  assert.deepEqual(toUnit({ id: 'ap-1', numero: '203', status: 'ocupado', torreId: 't-a', condominioId: 'c-1' }, towers), { id: 'ap-1', number: '203', tower: 'Torre A', towerId: 't-a', status: 'OCUPADO', owners: [], residents: [] })
   assert.equal(toUnit({ id: 'ap-2', numero: '10', status: null, torreId: null }, towers).tower, '')
   assert.equal(toUnit({ id: 'ap-2', numero: '10', status: null, torreId: null }, towers).status, '')
 })
 
-test('listarUnidades filtra pelo condomínio do token e junta torres', async () => {
-  setToken(fakeJwt({ condominio_id: 'c-1' }))
-  const { fetchImpl, calls } = fakeFetch([
-    ['/condominios/torres', 200, [{ id: 't-a', nome: 'Torre A', condominioId: 'c-1' }]],
-    ['/condominios/apartamentos', 200, [{ id: 'ap-1', numero: '203', status: 'LIVRE', torreId: 't-a', condominioId: 'c-1' }]],
-  ])
-  const units = await listarUnidades({ fetchImpl })
-  assert.deepEqual(units.map((unit) => [unit.number, unit.tower, unit.status]), [['203', 'Torre A', 'LIVRE']])
-  assert.ok(calls.every((call) => call.url.includes('condominioId=c-1')))
+const usuarioMorador = { id: 'u-1', nome: 'Maria', cpf: '529.982.247-25', email: 'm@x.com', telefone: '11900000000', perfil: 'MORADOR', status: 'ATIVO', vinculo: 'PROPRIETARIO', apartamentoId: 'ap-1', apartamentoNumero: '203', torreNome: 'Torre A', primeiroAcessoPendente: true }
+
+test('usuário morador vira morador da tela e preenche os vínculos da unidade', () => {
+  const resident = toResident(usuarioMorador)
+  assert.deepEqual(resident, { id: 'u-1', name: 'Maria', cpf: '529.982.247-25', email: 'm@x.com', phone: '11900000000', tower: 'Torre A', unit: '203', unitId: 'ap-1', relation: 'PROPRIETARIO', isOwner: true, status: 'ATIVO', pendingFirstAccess: true })
+  const inquilino = toResident({ ...usuarioMorador, id: 'u-2', nome: 'João', vinculo: 'INQUILINO' })
+  const inativo = toResident({ ...usuarioMorador, id: 'u-3', nome: 'Ex', status: 'INATIVO' })
+  const [unit] = linkResidents([toUnit({ id: 'ap-1', numero: '203', torreId: 't-a' }, { 't-a': 'Torre A' })], [resident, inquilino, inativo])
+  assert.deepEqual(unit.owners, ['Maria'])
+  assert.deepEqual(unit.residents, ['Maria', 'João'])
 })
 
-test('listarUnidades sem condomínio no token não consulta a API', async () => {
+test('carregarCadastros junta torres, unidades e moradores do condomínio do token', async () => {
+  setToken(fakeJwt({ condominio_id: 'c-1' }))
+  const { fetchImpl, calls } = fakeFetch([
+    ['/condominios/torres', 200, [{ id: 't-b', nome: 'Torre B' }, { id: 't-a', nome: 'Torre A' }]],
+    ['/condominios/apartamentos', 200, [{ id: 'ap-1', numero: '203', status: 'OCUPADO', torreId: 't-a' }]],
+    ['/usuarios', 200, [usuarioMorador, { ...usuarioMorador, id: 'adm', perfil: 'ADMIN', apartamentoId: null }]],
+  ])
+  const { towers, units, residents } = await carregarCadastros({ fetchImpl })
+  assert.deepEqual(towers.map((tower) => tower.name), ['Torre A', 'Torre B'])
+  assert.deepEqual(units.map((unit) => [unit.number, unit.tower, unit.owners]), [['203', 'Torre A', ['Maria']]])
+  assert.deepEqual(residents.map((resident) => resident.id), ['u-1'])
+  assert.ok(calls.filter((call) => call.url.includes('/condominios/')).every((call) => call.url.includes('condominioId=c-1')))
+})
+
+test('carregarCadastros sem permissão de listar usuários traz moradores vazios', async () => {
+  setToken(fakeJwt({ condominio_id: 'c-1' }))
+  const { fetchImpl } = fakeFetch([['/condominios/torres', 200, []], ['/condominios/apartamentos', 200, []], ['/usuarios', 403, { mensagem: 'Apenas administradores podem gerenciar usuários.' }]])
+  assert.deepEqual((await carregarCadastros({ fetchImpl })).residents, [])
+})
+
+test('carregarCadastros sem condomínio no token não consulta a API', async () => {
   setToken('')
   const { fetchImpl, calls } = fakeFetch([])
-  await assert.rejects(listarUnidades({ fetchImpl }), (error) => error.status === 401)
+  await assert.rejects(carregarCadastros({ fetchImpl }), (error) => error.status === 401)
   assert.equal(calls.length, 0)
+})
+
+test('comandos de unidade e torre montam a requisição certa', async () => {
+  setToken(fakeJwt({ condominio_id: 'c-1' }))
+  const towers = [{ id: 't-a', name: 'Torre A' }]
+  const { fetchImpl, calls } = fakeFetch([['/condominios', 200, {}]])
+  await criarTorre(' Torre C ', { fetchImpl })
+  await salvarUnidade({ tower: 'Torre A', number: ' 301 ', status: 'LIVRE' }, undefined, towers, { fetchImpl })
+  await salvarUnidade({ tower: 'Torre A', number: '301', status: 'OCUPADO' }, 'ap-9', towers, { fetchImpl })
+  await excluirUnidade('ap-9', { fetchImpl })
+  assert.deepEqual(calls.map((call) => [call.init.method, call.url.replace(/^.*(\/condominios)/, '$1')]), [['POST', '/condominios/torres'], ['POST', '/condominios/apartamentos'], ['PUT', '/condominios/apartamentos/ap-9'], ['DELETE', '/condominios/apartamentos/ap-9']])
+  assert.deepEqual(JSON.parse(calls[0].init.body), { nome: 'Torre C', condominioId: 'c-1' })
+  assert.deepEqual(JSON.parse(calls[1].init.body), { numero: '301', status: 'LIVRE', torreId: 't-a', condominioId: 'c-1' })
+  await assert.rejects(salvarUnidade({ tower: 'Torre Z', number: '1', status: 'LIVRE' }, undefined, towers, { fetchImpl }), (error) => error.status === 400)
+  await assert.rejects(criarTorre('  ', { fetchImpl }), (error) => error.status === 400)
+})
+
+test('comandos de morador resolvem a unidade e usam /usuarios', async () => {
+  setToken(fakeJwt({ condominio_id: 'c-1' }))
+  const units = [{ id: 'ap-1', tower: 'Torre A', number: '203' }]
+  const { fetchImpl, calls } = fakeFetch([['/usuarios', 200, usuarioMorador]])
+  const form = { name: 'Maria', cpf: '52998224725', email: 'm@x.com', phone: '11900000000', tower: 'Torre A', unit: ' 203 ', relation: 'PROPRIETARIO' }
+  await salvarMorador(form, undefined, units, { fetchImpl })
+  await salvarMorador(form, 'u-1', units, { fetchImpl })
+  await alterarStatusMorador('u-1', 'INATIVO', { fetchImpl })
+  await alterarStatusMorador('u-1', 'ATIVO', { fetchImpl })
+  assert.deepEqual(calls.map((call) => [call.init.method, call.url.replace(/^.*(\/usuarios)/, '$1')]), [['POST', '/usuarios'], ['PUT', '/usuarios/u-1'], ['PUT', '/usuarios/u-1/desativar'], ['PUT', '/usuarios/u-1/ativar']])
+  assert.deepEqual(JSON.parse(calls[0].init.body), { nome: 'Maria', cpf: '52998224725', email: 'm@x.com', telefone: '11900000000', perfil: 'MORADOR', apartamentoId: 'ap-1', vinculo: 'PROPRIETARIO' })
+  await assert.rejects(salvarMorador({ ...form, unit: '999' }, undefined, units, { fetchImpl }), (error) => error.status === 400 && /unidade existente/.test(error.message))
+})
+
+test('resposta 200 sem corpo (ex.: DELETE) não quebra', async () => {
+  setToken(fakeJwt({ condominio_id: 'c-1' }))
+  const fetchImpl = async () => ({ ok: true, status: 200, text: async () => '', json: async () => { throw new SyntaxError('empty') } })
+  assert.equal(await excluirUnidade('ap-1', { fetchImpl }), null)
 })
