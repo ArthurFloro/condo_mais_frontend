@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ApiError, apiGet, condominioIdFromToken, setToken, tokenClaims } from '../src/services/api.js'
-import { alterarStatusMorador, carregarCadastros, criarTorre, excluirUnidade, linkResidents, salvarMorador, salvarUnidade, toResident, toUnit } from '../src/services/cadastrosApi.js'
+import { createTestServer } from './viteTestServer.js'
+import { alterarStatusMorador, carregarCadastros, carregarUsuarioLogado, criarTorre, excluirUnidade, linkResidents, salvarMorador, salvarUnidade, toResident, toUnit } from '../src/services/cadastrosApi.js'
 
 // sessionStorage mínimo para o Node; cada teste define o próprio token.
 const storage = new Map()
@@ -144,4 +145,32 @@ test('resposta 200 sem corpo (ex.: DELETE) não quebra', async () => {
   setToken(fakeJwt({ condominio_id: 'c-1' }))
   const fetchImpl = async () => ({ ok: true, status: 200, text: async () => '', json: async () => { throw new SyntaxError('empty') } })
   assert.equal(await excluirUnidade('ap-1', { fetchImpl }), null)
+})
+
+test('usuário logado vem de /usuarios/me com unidade e nome do condomínio', async () => {
+  setToken(fakeJwt({ condominio_id: 'c-1' }))
+  const { fetchImpl, calls } = fakeFetch([['/usuarios/me', 200, { ...usuarioMorador, vinculo: 'INQUILINO', condominioNome: 'Residencial Real' }]])
+  const { currentResident, condominiumName } = await carregarUsuarioLogado({ fetchImpl })
+  assert.match(calls[0].url, /\/usuarios\/me$/)
+  assert.equal(currentResident.name, 'Maria')
+  assert.equal(currentResident.unit, '203')
+  assert.equal(currentResident.tower, 'Torre A')
+  assert.equal(currentResident.isOwner, false)
+  assert.equal(condominiumName, 'Residencial Real')
+})
+
+test('com a API ligada, o estado inicial não traz dados de demonstração', async () => {
+  const server = await createTestServer()
+  try {
+    const { apiInitialData } = await server.ssrLoadModule('/src/context/AppDataContext.jsx')
+    const { initialAppData } = await server.ssrLoadModule('/src/mocks/appData.js')
+    for (const key of ['towers', 'units', 'residents', 'visitors', 'providers', 'packages', 'reservations', 'notices', 'tickets', 'history', 'notifications']) {
+      assert.deepEqual(apiInitialData[key], [], key)
+    }
+    assert.equal(apiInitialData.currentResident.name, '')
+    assert.equal(apiInitialData.condominium.name, '')
+    const serialized = JSON.stringify(apiInitialData)
+    for (const resident of initialAppData.residents) assert.ok(!serialized.includes(resident.name), resident.name)
+    assert.ok(!serialized.includes(initialAppData.condominium.name))
+  } finally { await server.close() }
 })

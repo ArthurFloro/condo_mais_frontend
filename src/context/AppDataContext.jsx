@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { initialAppData } from '../mocks/appData'
 import { apiEnabled } from '../services/api'
-import { alterarStatusMorador, carregarCadastros, criarTorre, excluirUnidade, salvarMorador, salvarUnidade } from '../services/cadastrosApi'
+import { alterarStatusMorador, carregarCadastros, carregarUsuarioLogado, criarTorre, excluirUnidade, salvarMorador, salvarUnidade } from '../services/cadastrosApi'
 import { avisosService } from '../services/avisosService'
 import { moradoresService, unidadesService } from '../services/cadastrosService'
 import { chamadosService } from '../services/chamadosService'
@@ -18,8 +18,19 @@ function historyEntry(type, reference, unit, user = 'João Oliveira') {
   return { id: `HIS-${now.getTime()}-${Math.random()}`, timestamp: now.toISOString(), date: todayIso(now), time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), type, reference, unit, user }
 }
 
+// Com a API ligada, nada de demonstração aparece: cadastros e usuário logado vêm do servidor, e os
+// módulos ainda não integrados começam vazios (em vez de mostrar dados fictícios como se fossem reais).
+const emptyResident = { id: '', name: '', cpf: '', email: '', phone: '', tower: '', unit: '', relation: '', isOwner: false, status: 'ATIVO' }
+export const apiInitialData = {
+  ...initialAppData,
+  currentResident: emptyResident,
+  condominium: { ...initialAppData.condominium, name: '' },
+  towers: [], units: [], residents: [],
+  visitors: [], providers: [], packages: [], reservations: [], notices: [], tickets: [], history: [], notifications: [],
+}
+
 export function AppDataProvider({ children }) {
-  const [data, setData] = useState(() => apiEnabled() ? { ...initialAppData, towers: [], units: [], residents: [] } : initialAppData)
+  const [data, setData] = useState(() => apiEnabled() ? apiInitialData : initialAppData)
   // Coleções que vêm da API (cadastros): status idle (mock) | loading | success | error
   const initialRemote = { status: apiEnabled() ? 'loading' : 'idle', error: '' }
   const [remote, setRemote] = useState({ units: initialRemote, residents: initialRemote })
@@ -51,8 +62,21 @@ export function AppDataProvider({ children }) {
       await reloadCadastros({ silent: true })
     }
 
+    // Usuário logado: identidade do morador e nome do condomínio
+    async function reloadSession() {
+      // Limpa antes: ao trocar de usuário na mesma aba, a identidade anterior não aparece
+      setData((current) => ({ ...current, currentResident: emptyResident }))
+      try {
+        const { currentResident, condominiumName } = await carregarUsuarioLogado()
+        setData((current) => ({ ...current, currentResident, condominium: { ...current.condominium, name: condominiumName } }))
+      } catch {
+        // Sem sessão: a área continua vazia e as telas integradas mostram “Sessão inválida”
+      }
+    }
+
     return {
     reloadCadastros,
+    reloadAll: () => Promise.all([reloadCadastros(), reloadSession()]),
     createTower: (name) => command(() => criarTorre(name)),
     saveUnitRemote: (form, editingId) => command(() => salvarUnidade(form, editingId, dataRef.current.towers)),
     deleteUnitRemote: (id) => command(() => excluirUnidade(id)),
@@ -104,7 +128,7 @@ export function AppDataProvider({ children }) {
     }
   }, [])
 
-  useEffect(() => { if (apiEnabled()) actions.reloadCadastros() }, [actions])
+  useEffect(() => { if (apiEnabled()) actions.reloadAll() }, [actions])
 
   return <AppDataContext.Provider value={{ data, actions, remote }}>{children}</AppDataContext.Provider>
 }

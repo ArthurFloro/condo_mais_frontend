@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { createServer } from 'vite'
+import { createTestServer } from './viteTestServer.js'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
@@ -29,7 +29,7 @@ test('list and dashboard link to unique IDs, not water title', async () => {
 })
 
 test('real detail renders A/B/A by route ID and rejects unavailable IDs', async () => {
-  const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
+  const server = await createTestServer()
   try {
     const { CommunicationDetail } = await server.ssrLoadModule('/src/pages/morador/ResidentPages.jsx')
     const { AppDataProvider } = await server.ssrLoadModule('/src/context/AppDataContext.jsx')
