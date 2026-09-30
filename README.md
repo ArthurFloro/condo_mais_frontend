@@ -41,6 +41,19 @@ pnpm preview --host 127.0.0.1 --port 4173
 
 O build gera dist/, que não deve ser editado ou versionado. Execute build novamente após alterar o código antes de usar preview. Para hospedagem estática, configure fallback das rotas para index.html.
 
+## Deploy (Vercel)
+
+O `vercel.json` já define instalação com pnpm, build, pasta `dist` e o fallback das rotas para `index.html`. Sem esse fallback, recarregar uma página como `/admin/unidades` daria 404.
+
+No projeto da Vercel, configure as variáveis:
+
+| Variável | Valor |
+|---|---|
+| `VITE_API_URL` | URL pública da API, sem barra no final (ex.: `https://condomais-api.onrender.com`) |
+| `ENABLE_EXPERIMENTAL_COREPACK` | `1`, para usar o pnpm exato do `package.json` |
+
+`VITE_API_URL` é embutida no build: ao alterá-la, faça **Redeploy**. A URL de produção da Vercel precisa estar em `CORS_ALLOWED_ORIGINS` na API; URLs de preview mudam a cada deploy e não são liberadas. O passo a passo completo (Neon, Render e Vercel) está em `docs/DEPLOY.md` do [condomais-backend](https://github.com/ArthurFloro/condomais-backend).
+
 ## Testes
 
 ```sh
