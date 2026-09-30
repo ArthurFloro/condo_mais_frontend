@@ -89,8 +89,9 @@ A API responde erros com o corpo `{ status, erro, mensagem, caminho, timestamp }
 
 Sem corpo JSON ou sem `mensagem`, o front usa um texto padrão por status (`src/services/api.js`).
 - Claims do JWT: `sub` (CPF), `id`, `perfil`, `condominio_id`. O front lê as claims só para escopar requisições; a validação é do servidor.
-- O login do front ainda é mock e pede **e-mail**; o backend autentica por **CPF**. Até o ajuste da tela, o token de desenvolvimento vem de `VITE_API_TOKEN`.
-- `perfil` no backend é texto livre (ex.: `ADMIN`); os perfis do front são `ADMINISTRADOR`, `PORTEIRO` e `MORADOR`. O mapeamento precisa ser acordado antes de usar a claim para rotear layouts.
+- Tela de login (`LoginPage` + `src/services/authApi.js`): pede CPF com máscara `000.000.000-00` e envia nesse formato, que é como o backend grava (coluna de 14 caracteres). O token vai para o `sessionStorage` e é apagado em “Sair”. Um perfil sem área mapeada recusa a entrada.
+- `perfil` no backend é texto livre. O front aceita, sem diferenciar maiúsculas nem acentos: `ADMIN`/`ADMINISTRADOR`/`ADMINISTRAÇÃO` → `/admin`, `PORTARIA`/`PORTEIRO` → `/portaria`, `MORADOR` → `/morador`. Um enum no backend eliminaria essa tolerância.
+- As rotas do front ainda não exigem sessão: sem token, as telas integradas mostram “Sessão inválida” em vez de redirecionar ao login.
 
 ### Unidades (Administração → Unidades, somente consulta)
 
@@ -200,11 +201,11 @@ Testes devem criar fixtures descartáveis coerentes com o contrato decidido.
 
 ## Autenticação de desenvolvimento
 
-O formulário usa exclusivamente as contas públicas e fictícias de src/mocks/mockUsers.js, documentadas no README. Os perfis conceituais são ADMINISTRADOR, PORTEIRO e MORADOR. Proprietário/Inquilino continuam sendo vínculos com unidade, não perfis de autenticação.
+Com `VITE_API_URL`, o login usa a API (ver “Contrato já integrado”). Sem ela, o formulário usa as contas públicas e fictícias de src/mocks/mockUsers.js, por CPF, documentadas no README. Os perfis conceituais são ADMINISTRADOR, PORTEIRO e MORADOR. Proprietário/Inquilino continuam sendo vínculos com unidade, não perfis de autenticação.
 
-A verificação local de e-mail/senha serve apenas para permitir acesso determinístico aos três ambientes durante o desenvolvimento. **Não representa segurança**: o código e as credenciais chegam ao navegador e as rotas ainda não têm autorização. Logout apenas retorna ao login; não existe sessão autenticada. “Lembrar de mim” não implementa persistência de sessão.
+No modo mock, a verificação local de CPF/senha serve apenas para permitir acesso determinístico aos três ambientes durante o desenvolvimento. **Não representa segurança**: o código e as credenciais chegam ao navegador. Nos dois modos, as rotas do front ainda não exigem sessão, e “Lembrar de mim” não implementa persistência.
 
-A integração deverá substituir essa camada pelo serviço/endpoint real de autenticação, remover as credenciais mock e implementar autorização de rotas e de recursos no servidor. A equipe ainda deverá decidir contrato, política de sessão, permissões e tratamento de falhas; este documento não define URL, tokens, claims, cookies ou mecanismo de armazenamento.
+Ainda pendente: proteger as rotas do front conforme a sessão, redirecionar ao login quando o token expirar, e integrar primeiro acesso e recuperação de senha. A autorização por perfil também precisa existir no servidor.
 
 Primeiro acesso, criação e recuperação de senha continuam demonstrativos: não criam contas, não modificam as credenciais mock e não enviam mensagens. Não usar dados reais enquanto essas integrações não existirem.
 

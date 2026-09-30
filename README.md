@@ -52,17 +52,17 @@ A suíte usa node:test e renderização React com Vite, sem framework adicional.
 
 ## Acessos de desenvolvimento
 
-Enquanto a autenticação com o backend não estiver integrada, o projeto utiliza contas fictícias locais para acessar os perfis.
+O login é por **CPF e senha**. Com a API ligada (seção “Conectando à API”), valem os usuários cadastrados no backend. Sem a API, o projeto usa contas fictícias locais:
 
-| Ambiente | E-mail | Senha |
+| Ambiente | CPF | Senha |
 |---|---|---|
-| Administrador | admin@condomais.local | CondoDev123! |
-| Portaria | portaria@condomais.local | CondoDev123! |
-| Morador | morador@condomais.local | CondoDev123! |
+| Administrador | 000.000.000-01 | CondoDev123! |
+| Portaria | 000.000.000-02 | CondoDev123! |
+| Morador | 000.000.000-03 | CondoDev123! |
 
-Essas credenciais existem exclusivamente no ambiente mock e deverão ser removidas quando a autenticação real for integrada. São públicas e fictícias, não segredos. A fonte única é src/mocks/mockUsers.js.
+Essas credenciais existem exclusivamente no modo mock. São públicas e fictícias, não segredos, e os CPFs são propositalmente inválidos. A fonte única é src/mocks/mockUsers.js.
 
-O login rejeita credenciais incorretas, mas isso **não é segurança nem autorização**: as rotas ainda podem ser acessadas diretamente. Primeiro acesso e recuperação são demonstrativos, não alteram essas contas nem enviam e-mail.
+No modo mock, o login rejeita credenciais incorretas, mas isso **não é segurança nem autorização**: as rotas ainda podem ser acessadas diretamente. Primeiro acesso e recuperação são demonstrativos nos dois modos, não alteram contas nem enviam e-mail.
 
 ## Estrutura
 
@@ -100,9 +100,11 @@ Os services atuais retornam arrays/objetos de forma síncrona. A integração ex
 
 ### Conectando à API (desenvolvimento)
 
-Sem configuração, o app usa apenas os mocks. Para ligar à API [condomais-backend](https://github.com/ArthurFloro/condomais-backend), copie `.env.example` para `.env.local` (ignorado pelo Git) e preencha:
+Sem configuração, o app usa apenas os mocks. Para ligar à API [condomais-backend](https://github.com/ArthurFloro/condomais-backend), copie `.env.example` para `.env.local` (ignorado pelo Git) e preencha `VITE_API_URL` com o endereço da API, por exemplo `http://localhost:8080`. Reinicie `pnpm dev` após alterar o arquivo.
 
-- `VITE_API_URL`: endereço da API, por exemplo `http://localhost:8080`.
-- `VITE_API_TOKEN`: token JWT obtido em `POST /auth/login` no Swagger da API (`/swagger-ui.html`). Expira em 8 horas. É temporário, até o login real ser integrado, e não deve ser versionado.
+Com a API ligada:
 
-Reinicie `pnpm dev` após alterar o arquivo. Hoje apenas **Administração → Unidades** vem da API, em modo somente consulta; as demais telas continuam com os mocks.
+- o login autentica em `POST /auth/login` com CPF e senha de um usuário do backend. O primeiro acesso de um usuário recém-cadastrado ainda é feito pelo Swagger da API (`/swagger-ui.html`), em `POST /auth/primeiro-acesso`;
+- o perfil do usuário (`ADMIN`, `PORTARIA`, `MORADOR`...) decide a área aberta após o login;
+- o token fica no `sessionStorage`: some ao fechar a aba, expira em 8 horas e é apagado em “Sair”;
+- hoje apenas **Administração → Unidades** vem da API, em modo somente consulta; as demais telas continuam com os mocks.
