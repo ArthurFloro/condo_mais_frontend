@@ -40,10 +40,29 @@ test('apiGet envia bearer token e ignora parâmetros vazios', async () => {
 
 test('apiGet converte falhas HTTP e de rede em ApiError com mensagem amigável', async () => {
   setToken('token-teste')
-  const unauthorized = fakeFetch([['/x', 403, {}]])
-  await assert.rejects(apiGet('/x', {}, unauthorized), (error) => error instanceof ApiError && error.status === 403 && /Sessão inválida/.test(error.message))
+  const unauthorized = fakeFetch([['/x', 401, {}]])
+  await assert.rejects(apiGet('/x', {}, unauthorized), (error) => error instanceof ApiError && error.status === 401 && /Sessão inválida/.test(error.message))
+  const forbidden = fakeFetch([['/x', 403, {}]])
+  await assert.rejects(apiGet('/x', {}, forbidden), (error) => error.status === 403 && /não tem permissão/.test(error.message))
   const offline = async () => { throw new TypeError('Failed to fetch') }
   await assert.rejects(apiGet('/x', {}, { fetchImpl: offline }), (error) => error.status === 0 && /conectar ao servidor/.test(error.message))
+})
+
+test('erros de negócio exibem a mensagem da API; sessão e falha interna usam texto fixo', async () => {
+  setToken('token-teste')
+  const erro = (status, mensagem) => ({ status, erro: 'x', mensagem, caminho: '/x', timestamp: '2026-09-29T00:00:00Z' })
+  for (const [status, mensagem] of [[400, 'A prioridade deve ser NORMAL ou URGENTE.'], [404, 'Torre não encontrada.'], [409, 'Não é possível excluir a torre: existem apartamentos vinculados.'], [403, 'Acesso negado a dados de outro condomínio.']]) {
+    await assert.rejects(apiGet('/x', {}, fakeFetch([['/x', status, erro(status, mensagem)]])), (error) => error.status === status && error.message === mensagem)
+  }
+  await assert.rejects(apiGet('/x', {}, fakeFetch([['/x', 401, erro(401, 'Token ausente, inválido ou expirado.')]])), (error) => /Sessão inválida/.test(error.message))
+  await assert.rejects(apiGet('/x', {}, fakeFetch([['/x', 500, erro(500, 'detalhe interno')]])), (error) => /servidor não conseguiu/.test(error.message) && !/detalhe interno/.test(error.message))
+})
+
+test('erro sem corpo JSON ou sem mensagem usa o texto padrão do status', async () => {
+  setToken('token-teste')
+  const semJson = async () => ({ ok: false, status: 404, json: async () => { throw new SyntaxError('Unexpected end of JSON input') } })
+  await assert.rejects(apiGet('/x', {}, { fetchImpl: semJson }), (error) => error.status === 404 && error.message === 'Registro não encontrado.')
+  await assert.rejects(apiGet('/x', {}, fakeFetch([['/x', 409, { mensagem: '   ' }]])), (error) => error.message === 'Não foi possível concluir a operação.')
 })
 
 test('apartamento vira unidade com nome da torre; sem torre fica em branco', () => {
