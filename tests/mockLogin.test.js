@@ -72,3 +72,18 @@ test('login renderizado pede CPF, oculta senha e não exibe contas de desenvolvi
     assert.doesNotMatch(html, />(?:Admin|Portaria|Morador)<\/button>/)
   } finally { await server.close() }
 })
+
+test('primeiro acesso pede CPF com máscara e mantém o fluxo demonstrativo no modo mock', async () => {
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' })
+  try {
+    const { default: AuthFlowPage } = await server.ssrLoadModule('/src/pages/auth/AuthFlowPage.jsx')
+    const { AppDataProvider } = await server.ssrLoadModule('/src/context/AppDataContext.jsx')
+    const render = (step, path) => renderToStaticMarkup(React.createElement(AppDataProvider, null, React.createElement(MemoryRouter, { initialEntries: [path] }, React.createElement(AuthFlowPage, { step }))))
+    const first = render('first', '/primeiro-acesso')
+    assert.match(first, /Primeiro acesso/)
+    assert.match(first, /inputMode="numeric"|inputmode="numeric"/)
+    assert.match(first, /placeholder="000.000.000-00"/)
+    const create = render('create', '/criar-senha')
+    assert.match(create, /Ative sua conta|Informe seu CPF antes de criar a senha/)
+  } finally { await server.close() }
+})
