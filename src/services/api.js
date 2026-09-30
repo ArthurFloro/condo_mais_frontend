@@ -31,10 +31,22 @@ export function tokenClaims(token = getToken()) {
 export function condominioIdFromToken(token = getToken()) { return tokenClaims(token)?.condominio_id || '' }
 
 function errorMessage(status) {
-  if (status === 401 || status === 403) return 'Sessão inválida ou expirada. Entre novamente.'
+  if (status === 401) return 'Sessão inválida ou expirada. Entre novamente.'
+  if (status === 403) return 'Você não tem permissão para esta operação.'
   if (status === 404) return 'Registro não encontrado.'
   if (status >= 500) return 'O servidor não conseguiu concluir a operação. Tente novamente.'
   return 'Não foi possível concluir a operação.'
+}
+
+// A API responde erros como ErroResponseDTO { status, erro, mensagem, caminho, timestamp }.
+// A mensagem do servidor só é exibida em erros de negócio; sessão (401) e falhas internas (5xx) usam texto fixo.
+async function responseError(response) {
+  const fallback = errorMessage(response.status)
+  if (response.status === 401 || response.status >= 500) return new ApiError(response.status, fallback)
+  let body = null
+  try { body = await response.json() } catch { /* corpo vazio ou não JSON */ }
+  const message = typeof body?.mensagem === 'string' && body.mensagem.trim() ? body.mensagem.trim() : fallback
+  return new ApiError(response.status, message)
 }
 
 export async function apiGet(path, params = {}, { fetchImpl = fetch } = {}) {
@@ -46,6 +58,6 @@ export async function apiGet(path, params = {}, { fetchImpl = fetch } = {}) {
   } catch {
     throw new ApiError(0, 'Não foi possível conectar ao servidor. Verifique sua conexão.')
   }
-  if (!response.ok) throw new ApiError(response.status, errorMessage(response.status))
+  if (!response.ok) throw await responseError(response)
   return response.status === 204 ? null : response.json()
 }

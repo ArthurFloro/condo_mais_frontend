@@ -73,6 +73,21 @@ Backend: [condomais-backend](https://github.com/ArthurFloro/condomais-backend) (
 - `VITE_API_URL` liga a integração; sem ela, tudo é mock. Ver README, seção “Conectando à API”.
 - Login: `POST /auth/login` com `{ cpf, senha }` devolve `{ token }` (JWT, expira em 8 h). Primeiro acesso: `POST /auth/primeiro-acesso` com `{ cpf, novaSenha }`, só para usuário pré-cadastrado sem senha.
 - Toda chamada envia `Authorization: Bearer <token>`. Não há cookies; o CORS do backend libera `localhost:5173` e `127.0.0.1:5173`.
+
+### Erros
+
+A API responde erros com o corpo `{ status, erro, mensagem, caminho, timestamp }`:
+
+| Status | Quando | O que o front exibe |
+|---|---|---|
+| 400 | Regra de negócio violada, JSON ou parâmetro inválido | `mensagem` da API |
+| 401 | Token ausente, inválido ou expirado; login com CPF/senha errados | “Sessão inválida ou expirada” (texto fixo) |
+| 403 | Acesso a dados de outro condomínio | `mensagem` da API |
+| 404 | Registro não encontrado | `mensagem` da API |
+| 409 | Conflito: duplicidade, exclusão bloqueada por vínculos, horário já reservado | `mensagem` da API |
+| 5xx | Falha interna | Texto fixo; detalhes ficam só no log do servidor |
+
+Sem corpo JSON ou sem `mensagem`, o front usa um texto padrão por status (`src/services/api.js`).
 - Claims do JWT: `sub` (CPF), `id`, `perfil`, `condominio_id`. O front lê as claims só para escopar requisições; a validação é do servidor.
 - O login do front ainda é mock e pede **e-mail**; o backend autentica por **CPF**. Até o ajuste da tela, o token de desenvolvimento vem de `VITE_API_TOKEN`.
 - `perfil` no backend é texto livre (ex.: `ADMIN`); os perfis do front são `ADMINISTRADOR`, `PORTEIRO` e `MORADOR`. O mapeamento precisa ser acordado antes de usar a claim para rotear layouts.
@@ -97,7 +112,6 @@ Criar/editar unidade fica oculto no modo API até os comandos serem integrados. 
 ### Limitações conhecidas do backend
 
 - **Escopo por condomínio vem da query string.** As listagens aceitam `condominioId` por parâmetro e não o conferem com o token. O front sempre envia o do token, mas a proteção precisa ficar no servidor.
-- **Erros de regra de negócio respondem 403.** Sem tratamento global de exceções, uma validação (ex.: torre inexistente) chega como 403, indistinguível de “sem permissão”. Enquanto isso não muda, o front mostra “Sessão inválida” para esses casos.
 - `status` de apartamento é texto livre; os valores `OCUPADO`, `LIVRE`, `INATIVO` e `RESERVADO` são convenção, não enum validado.
 
 ## Enums e catálogos atuais
