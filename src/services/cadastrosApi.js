@@ -61,6 +61,12 @@ export async function carregarCadastros(options) {
   return { towers, units, residents }
 }
 
+// Usuário logado (GET /usuarios/me, qualquer perfil): monta a área do morador com os dados reais
+export async function carregarUsuarioLogado(options) {
+  const usuario = await apiGet('/usuarios/me', {}, options)
+  return { currentResident: toResident(usuario), condominiumName: usuario.condominioNome || '' }
+}
+
 export async function criarTorre(nome, options) {
   if (!nome?.trim()) throw new ApiError(400, 'Informe o nome da torre.')
   return apiPost('/condominios/torres', { nome: nome.trim(), condominioId: condominioId() }, options)

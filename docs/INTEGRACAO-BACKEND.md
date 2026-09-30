@@ -2,7 +2,7 @@
 
 ## Estado atual e limites
 
-React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Primeira integração em andamento: src/services/api.js (cliente HTTP com bearer token, ativado por VITE_API_URL) e src/services/cadastrosApi.js alimentam os cadastros de Unidades, Torres e Moradores (leitura e comandos), com estados loading/error/retry em AppDataContext. Login por CPF via API (src/services/authApi.js). As demais telas continuam mock. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
+React/Vite/Router, JavaScript, componentes compartilhados, layouts por perfil e estado em AppDataContext. Primeira integração em andamento: src/services/api.js (cliente HTTP com bearer token, ativado por VITE_API_URL) e src/services/cadastrosApi.js alimentam os cadastros de Unidades, Torres e Moradores (leitura e comandos), com estados loading/error/retry em AppDataContext. Login por CPF via API (src/services/authApi.js) e usuário logado via `GET /usuarios/me` (currentResident e nome do condomínio). Com a API ligada, as coleções dos módulos não integrados começam vazias (`apiInitialData`), sem dados de demonstração. O login valida contas fictícias locais em src/mocks/mockUsers.js e direciona para o perfil correspondente; Admin/Portaria usam ator fixo, Morador usa currentResident. Não interpretar rotas/controles visíveis como autorização.
 
 Proteção de RecordDetails é uma **allowlist de exibição**, não sanitização de API, controle de acesso ou DTO definitivo.
 
@@ -37,7 +37,7 @@ Relações que precisam de decisão por ID:
 - Encomenda escolhe primeiro morador da unidade e usa nome fixo de porteiro.
 - Histórico usa strings compostas para ator/alvo/local.
 - Notificações de reserva não identificam torre/destinatário de modo completo.
-- currentResident duplica residents e não é sincronizado após edição.
+- currentResident duplica residents e não é sincronizado após edição (no modo API ele vem de `/usuarios/me` e é recarregado a cada login).
 
 Não remover defesas de torre+unidade antes de substituir sua função por identidade acordada.
 

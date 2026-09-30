@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { createServer } from 'vite'
+import { createTestServer } from './viteTestServer.js'
 import { mockUsers, validateMockLogin } from '../src/mocks/mockUsers.js'
 
 for (const [profile, path] of [['ADMINISTRADOR', '/admin'], ['PORTEIRO', '/portaria'], ['MORADOR', '/morador']]) {
@@ -52,7 +52,7 @@ test('CPF aceita com ou sem pontuação, sem alterar a senha', () => {
 })
 
 test('login renderizado pede CPF, oculta senha e não exibe contas de desenvolvimento', async () => {
-  const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' })
+  const server = await createTestServer()
   try {
     const { default: LoginPage } = await server.ssrLoadModule('/src/pages/auth/LoginPage.jsx')
     const { AppDataProvider } = await server.ssrLoadModule('/src/context/AppDataContext.jsx')
@@ -74,7 +74,7 @@ test('login renderizado pede CPF, oculta senha e não exibe contas de desenvolvi
 })
 
 test('primeiro acesso pede CPF com máscara e mantém o fluxo demonstrativo no modo mock', async () => {
-  const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' })
+  const server = await createTestServer()
   try {
     const { default: AuthFlowPage } = await server.ssrLoadModule('/src/pages/auth/AuthFlowPage.jsx')
     const { AppDataProvider } = await server.ssrLoadModule('/src/context/AppDataContext.jsx')

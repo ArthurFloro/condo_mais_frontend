@@ -48,7 +48,7 @@ pnpm test
 git diff --check
 ```
 
-A suíte usa node:test e renderização React com Vite, sem framework adicional. Verificações de foco, layout e navegação devem ser complementadas no navegador.
+A suíte usa node:test e renderização React com Vite, sem framework adicional. Os servidores Vite dos testes (tests/viteTestServer.js) ignoram o `.env.local` e usam cache próprio: o resultado não depende da configuração local e rodar os testes não derruba um `pnpm dev` aberto. Verificações de foco, layout e navegação devem ser complementadas no navegador.
 
 ## Acessos de desenvolvimento
 
@@ -107,5 +107,7 @@ Com a API ligada:
 - o login autentica em `POST /auth/login` com CPF e senha de um usuário do backend. Um usuário recém-cadastrado ativa a conta em “Ativar minha conta” (CPF e nova senha), que chama `POST /auth/primeiro-acesso` e já entra no sistema;
 - o perfil do usuário (`ADMIN`, `PORTARIA`, `MORADOR`...) decide a área aberta após o login;
 - o token fica no `sessionStorage`: some ao fechar a aba, expira em 8 horas e é apagado em “Sair”;
-- **Administração → Unidades** (com cadastro de torres) e **Administração → Moradores** usam a API para listar, criar, editar, excluir unidades e ativar/desativar moradores; as demais telas continuam com os mocks;
+- **Administração → Unidades** (com cadastro de torres) e **Administração → Moradores** usam a API para listar, criar, editar, excluir unidades e ativar/desativar moradores;
+- a identidade de quem entrou (nome, unidade, vínculo) e o nome do condomínio vêm de `GET /usuarios/me`;
+- **nenhum dado de demonstração aparece com a API ligada**: módulos ainda não integrados (comunicados, encomendas, visitantes, prestadores, reservas, chamados, histórico) começam vazios. Registros criados neles ficam só na memória do navegador até serem integrados;
 - morador cadastrado pela Administração entra sem senha e a cria no primeiro acesso, com o CPF.

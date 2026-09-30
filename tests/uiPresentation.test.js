@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { createServer } from 'vite'
+import { createTestServer } from './viteTestServer.js'
 import { statusIntent, emptyMessage, confirmationMessage, errorField } from '../src/config/uiPresentation.js'
 import { commonAreas, priorities } from '../src/config/catalogs.js'
 import { initialAppData } from '../src/mocks/appData.js'
@@ -39,7 +39,7 @@ test('catálogo compartilhado preserva valores mock', () => {
 })
 
 test('componentes renderizados preservam dados permitidos e semântica', async (t) => {
-  const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' })
+  const server = await createTestServer()
   const render = (Component, props) => renderToStaticMarkup(React.createElement(Component, props))
   try {
     const { default: RecordDetails } = await server.ssrLoadModule('/src/components/RecordDetails.jsx')
